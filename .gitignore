@@ -21,5 +21,7 @@ logs/
 # OS
 .DS_Store
 
-# Project docs (kept local, not versioned)
+# Project docs and all Markdown except README.md stay local (CLAUDE.md §9)
 docs/
+*.md
+!README.md
