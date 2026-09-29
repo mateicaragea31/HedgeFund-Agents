@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aihf"
+version = "0.0.1"
+description = "Reproduction and extension of TradingAgents with open-weight models (dissertation)"
+requires-python = ">=3.12"
+# `tradingagents` is installed separately as an editable install of
+# ../reference/TradingAgents (it is not on PyPI at the pinned commit):
+#   pip install -e ../reference/TradingAgents -e ".[dev]"
+dependencies = [
+    "pydantic>=2.7",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "ruff>=0.15",
+    "pytest>=8.0",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra --strict-markers -m 'not gpu'"
+markers = [
+    "gpu: needs a running vLLM server on a GPU node (run with -m gpu inside a job)",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = ["data", "results"]
+
+[tool.ruff.lint]
+# Same rule set as upstream, so code moving between the two reads the same.
+select = ["E", "W", "F", "I", "B", "UP", "C4", "SIM"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/__init__.py" = ["F401"]
