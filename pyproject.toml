@@ -7,10 +7,12 @@ name = "aihf"
 version = "0.0.1"
 description = "Reproduction and extension of TradingAgents with open-weight models (dissertation)"
 requires-python = ">=3.12"
-# `tradingagents` is installed separately as an editable install of
-# ../reference/TradingAgents (it is not on PyPI at the pinned commit):
-#   pip install -e ../reference/TradingAgents -e ".[dev]"
+# Our own implementation of TradingAgents. Never depends on `tradingagents`:
+# ../reference/TradingAgents is reading material only.
 dependencies = [
+    "langchain-core>=1.6",
+    "langchain-openai>=1.6",
+    "langgraph>=1.2",
     "pydantic>=2.7",
     "pyyaml>=6.0",
 ]
