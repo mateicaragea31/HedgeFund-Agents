@@ -1,0 +1,29 @@
+# `dev` profile (CLAUDE.md §4.3): small model for pipeline debugging and smoke tests.
+# Never used for reported results.
+
+name: llama-3.1-8b                       # name the vLLM server answers to
+profile: dev
+hf_repo: meta-llama/Meta-Llama-3.1-8B-Instruct   # old repo name of Llama-3.1-8B-Instruct
+revision: 0e9e39f249a16976918f6564b8830bc894c89659
+path: ${AIHF_LAB}/.cache/hub/models--meta-llama--Meta-Llama-3.1-8B-Instruct/snapshots/0e9e39f249a16976918f6564b8830bc894c89659
+knowledge_cutoff: 2023-12-31             # model card: "December 2023"; the runner refuses windows starting on or before this
+
+hardware:
+  partition: dgxa100
+  gpus: 1
+  precision: bf16
+
+vllm:                                    # flags for `vllm serve` (vLLM 0.23.0, lab image vllm_v4.sif)
+  dtype: bfloat16
+  tensor_parallel_size: 1
+  max_model_len: 65536
+  gpu_memory_utilization: 0.90
+  enable_prefix_caching: true
+  enable_auto_tool_choice: true
+  tool_call_parser: llama3_json
+  chat_template: serving/templates/tool_chat_template_llama3.1_json.jinja
+  seed: 0
+
+chat_template_source:                    # copied byte-for-byte, Apache-2.0
+  url: https://github.com/vllm-project/vllm/blob/v0.23.0/examples/tool_chat_template_llama3.1_json.jinja
+  sha256: 8aedd05f7ab549b897b929c89da9b62e537f4f4197f33736e9d2f10fea53b1bf
