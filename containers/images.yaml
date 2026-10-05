@@ -1,0 +1,20 @@
+# Apptainer images our jobs run in (CLAUDE.md §4.5).
+# Every job logs the sha256 of the image it actually used; if it differs from the
+# value here, stop and investigate before trusting any result.
+
+serving:
+  path: ${AIHF_LAB}/containers/vllm_v4.sif   # lab image, read-only use
+  owner: lab (Stefan Ruseti)
+  built: 2026-07-03
+  base: pytorch/pytorch:2.11.0-cuda13.0-cudnn9-devel
+  versions: {vllm: 0.23.0, torch: 2.11.0, transformers: 5.12.1, cuda: "13.0"}
+  size: 15G
+  sha256: null   # 15 GB: computed inside the first GPU job, not on the shared login node
+
+agents:
+  path: ${AIHF_STORE}/containers/python312.sif
+  source: docker://python:3.12-slim
+  pulled: 2026-10-04
+  versions: {python: 3.12.15}
+  size: 41M
+  sha256: 677f46b03502d03d67ee54b0a93e64c263e2b6da2e9b174c66aeacacc749b1a3
