@@ -35,8 +35,15 @@ VLLM_LOG=logs/vllm-${SLURM_JOB_ID}.log
 echo "== job $SLURM_JOB_ID on $(hostname), commit $(git rev-parse --short HEAD), $(date -Is)"
 nvidia-smi -L
 
-echo "== sha256 of the serving image (15 GB, takes a minute or two)"
+echo "== sha256 of the serving image (15 GB, takes under a minute)"
 sha256sum "$SERVE_SIF" | tee "logs/image-${SLURM_JOB_ID}.sha256"
+ACTUAL=$(cut -d' ' -f1 "logs/image-${SLURM_JOB_ID}.sha256")
+EXPECTED=$(awk '/^serving:/{s=1} s && /sha256:/{print $2; exit}' containers/images.yaml)
+if [ "$ACTUAL" != "$EXPECTED" ]; then
+  echo "STOP: the serving image changed (expected $EXPECTED). Check with Stefan before trusting any result."
+  exit 1
+fi
+echo "serving image matches containers/images.yaml"
 
 echo "== starting vLLM on port $PORT (log: $VLLM_LOG)"
 apptainer exec --nv "$SERVE_SIF" vllm serve "$MODEL_DIR" \

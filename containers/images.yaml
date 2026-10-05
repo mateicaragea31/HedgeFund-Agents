@@ -9,7 +9,7 @@ serving:
   base: pytorch/pytorch:2.11.0-cuda13.0-cudnn9-devel
   versions: {vllm: 0.23.0, torch: 2.11.0, transformers: 5.12.1, cuda: "13.0"}
   size: 15G
-  sha256: null   # 15 GB: computed inside the first GPU job, not on the shared login node
+  sha256: 0ab6760fff0b2a3e0eb2ae8e5d0be85c981182612473e31b5cdde03109183a9c   # job 268152, 2026-10-05
 
 agents:
   path: ${AIHF_STORE}/containers/python312.sif
