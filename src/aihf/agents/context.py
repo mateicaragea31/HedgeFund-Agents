@@ -55,6 +55,30 @@ def get_instrument_context_from_state(state: Mapping[str, Any]) -> str:
     return build_instrument_context(str(state["company_of_interest"]))
 
 
+def report_or_absent(text: str, source: str) -> str:
+    """An analyst's report, or a note saying it was never written (upstream's wording).
+
+    A blank in the prompt reads like "the analyst found nothing", and the reading agent then
+    fills it in from nothing; the note says plainly that the report doesn't exist.
+    """
+    text = (text or "").strip()
+    if text:
+        return text
+    return f"(No {source} report in this run: it is not available, not an empty finding.)"
+
+
+def opponent_argument_or_opening(text: str, opponent: str) -> str:
+    """The other side's last argument, or a note that they haven't spoken yet (upstream's wording).
+
+    Without the note, the first speaker is asked to "refute" an empty argument and tends to
+    invent one.
+    """
+    text = (text or "").strip()
+    if text:
+        return text
+    return f"(The {opponent} has not spoken yet — open the debate with your own case.)"
+
+
 def create_msg_delete():
     """A node that removes every message and leaves one note naming the company and date.
 

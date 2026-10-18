@@ -89,3 +89,59 @@ def render_sentiment_report(report: SentimentReport) -> str:
         "",
         report.narrative,
     ])
+
+
+class PortfolioRating(StrEnum):  # upstream: (str, Enum); same values, same JSON schema
+    """5-tier rating used by the Research Manager and Portfolio Manager."""
+
+    BUY = "Buy"
+    OVERWEIGHT = "Overweight"
+    HOLD = "Hold"
+    UNDERWEIGHT = "Underweight"
+    SELL = "Sell"
+
+
+class ResearchPlan(BaseModel):
+    """Structured investment plan produced by the Research Manager.
+
+    Hand-off to the Trader: the recommendation pins the directional view,
+    the rationale captures which side of the bull/bear debate carried the
+    argument, and the strategic actions translate that into concrete
+    instructions the trader can execute against.
+    """
+
+    recommendation: PortfolioRating = Field(
+        description=(
+            "The investment recommendation. Exactly one of Buy / Overweight / "
+            "Hold / Underweight / Sell. Conflicting arguments alone are not a "
+            "reason to Hold: commit to the stronger side, sized by how "
+            "decisively it wins. Choose Hold only when the evidence is still "
+            "balanced after weighing, or too thin to support a call."
+        ),
+    )
+    rationale: str = Field(
+        description=(
+            "Conversational summary of the key points from both sides of the "
+            "debate, ending with which arguments led to the recommendation. "
+            "Speak naturally, as if to a teammate."
+        ),
+    )
+    strategic_actions: str = Field(
+        description=(
+            "Concrete steps for the trader to implement the recommendation, "
+            "including sizing guidance relative to a standard allocation. The "
+            "research team does not see the caller's holdings; the trader and "
+            "portfolio manager apply the actual position."
+        ),
+    )
+
+
+def render_research_plan(plan: ResearchPlan) -> str:
+    """The filled form as markdown, for the notebook and the Trader's prompt."""
+    return "\n".join([
+        f"**Recommendation**: {plan.recommendation.value}",
+        "",
+        f"**Rationale**: {plan.rationale}",
+        "",
+        f"**Strategic Actions**: {plan.strategic_actions}",
+    ])
