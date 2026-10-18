@@ -11,7 +11,8 @@ __pycache__/
 .env.*
 
 # Data and results (large, regenerable). Only results/summary/ is versioned.
-data/
+# (root only: src/aihf/data is code)
+/data/
 results/*
 !results/summary/
 
