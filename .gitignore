@@ -25,3 +25,8 @@ logs/
 docs/
 *.md
 !README.md
+
+# Local only: unit tests, teaching examples, serving helpers
+tests/
+learning_lab/
+serving/
