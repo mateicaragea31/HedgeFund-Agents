@@ -19,6 +19,7 @@ dependencies = [
     "pyyaml>=6.0",
     "stockstats>=0.6.5",
     "tzdata",  # time-zone rules for zoneinfo; the slim container may have none
+    "yfinance>=1.4.1",  # only the price collector imports it
 ]
 
 [project.optional-dependencies]
