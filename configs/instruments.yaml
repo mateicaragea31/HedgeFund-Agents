@@ -1,0 +1,6 @@
+# Who each ticker is, pasted into every prompt (src/aihf/agents/context.py).
+# Written by hand as of the paper's test window (2024-01 .. 2024-03), not looked up live:
+# a present-day profile would carry information from after the trade date (DEVIATIONS D2).
+AAPL: {company: Apple Inc., exchange: NASDAQ}
+GOOGL: {company: Alphabet Inc. (Class A), exchange: NASDAQ}
+AMZN: {company: "Amazon.com, Inc.", exchange: NASDAQ}
