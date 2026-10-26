@@ -1,0 +1,14 @@
+# E0-dev (CLAUDE.md §6.5): pipeline check on the `dev` model. Never a reported result.
+name: e0_dev
+phase: 1
+tickers: [AAPL]
+window: {start: 2024-01-02, end: 2024-03-28}
+model_profile: configs/models/llama31_8b_dev.yaml   # knowledge_cutoff: 2023-12-31
+quick_model: llama-3.1-8b
+deep_model: llama-3.1-8b
+analysts: [market, social, news, fundamentals]
+max_debate_rounds: 1
+max_risk_discuss_rounds: 1
+memory: true
+holding_period_days: 5
+sampling: {temperature: model_default}
