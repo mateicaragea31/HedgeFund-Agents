@@ -38,8 +38,9 @@ from aihf.tools.logged import LoggedSource
 logger = logging.getLogger("run_cell")
 
 
-class _FallbackCounter(logging.Handler):
-    """Counts "structured output failed" warnings from aihf.llm.structured (form → plain text)."""
+class _WarningCounter(logging.Handler):
+    """Counts the warnings of one logger: form → plain-text fallbacks (aihf.llm.structured) and
+    dropped extra tool calls (aihf.agents.analysts)."""
 
     def __init__(self):
         super().__init__(level=logging.WARNING)
@@ -107,8 +108,10 @@ def run(
     """
     cell_dir.mkdir(parents=True, exist_ok=True)
     logged = LoggedSource(data)
-    fallbacks = _FallbackCounter()
-    logging.getLogger("aihf.llm.structured").addHandler(fallbacks)
+    counters = {"structured_fallbacks": ("aihf.llm.structured", _WarningCounter()),
+                "tool_calls_dropped_turns": ("aihf.agents.analysts", _WarningCounter())}
+    for name, counter in counters.values():
+        logging.getLogger(name).addHandler(counter)
     past_context = DecisionLog(memory_path).get_past_context(ticker, as_of=trade_date) if experiment.memory else ""
     report = {
         "ticker": ticker,
@@ -135,11 +138,13 @@ def run(
         logger.exception("cell failed")
         report.update(rating=None, error=f"{type(exc).__name__}: {exc}")
     finally:
-        logging.getLogger("aihf.llm.structured").removeHandler(fallbacks)
+        for name, counter in counters.values():
+            logging.getLogger(name).removeHandler(counter)
 
     report["wall_seconds"] = round(time.monotonic() - t0, 1)
     report["llm"] = summarize_llm_log(cell_dir / "llm_log.jsonl")
-    report["llm"]["structured_fallbacks"] = fallbacks.count
+    for key, (_, counter) in counters.items():
+        report["llm"][key] = counter.count
     report["data_requests"] = logged.requests
     report["gaps"] = sorted({r["method"] for r in logged.requests if r.get("gap")})
     report["real_data"] = sorted({r["method"] for r in logged.requests
@@ -204,9 +209,10 @@ def main(argv: list[str] | None = None) -> int:
                  extra={"backend_url": args.backend_url})
 
     llm = report["llm"]
-    logger.info("rating %s in %.0f s; %d LLM calls, %d tokens in, %d out, %d form fallbacks",
-                report["rating"], report["wall_seconds"], llm["calls"], llm["input_tokens"],
-                llm["output_tokens"], llm["structured_fallbacks"])
+    logger.info("rating %s in %.0f s; %d LLM calls, %d tokens in, %d out, %d form fallbacks, "
+                "%d turns with extra tool calls dropped", report["rating"], report["wall_seconds"],
+                llm["calls"], llm["input_tokens"], llm["output_tokens"], llm["structured_fallbacks"],
+                llm["tool_calls_dropped_turns"])
     logger.info("gaps: %s; real data: %s", report["gaps"], report["real_data"])
     if report["error"]:
         logger.error("cell failed: %s", report["error"])

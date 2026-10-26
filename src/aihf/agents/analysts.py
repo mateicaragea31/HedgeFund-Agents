@@ -6,6 +6,7 @@ and the report field differ. The Sentiment Analyst has no tools: it fetches its 
 pastes them into the prompt, and fills in a SentimentReport form.
 """
 
+import logging
 from collections.abc import Callable, Mapping
 
 from langchain_core.messages import AIMessage
@@ -26,6 +27,8 @@ from aihf.prompts.analysts import (
 from aihf.tools.dates import days_back
 from aihf.tools.source import DataSource
 
+logger = logging.getLogger(__name__)
+
 # Which tools each analyst is offered (upstream's TOOLS tuples, by name).
 MARKET_TOOLS = ("get_stock_data", "get_indicators", "get_verified_market_snapshot")
 NEWS_TOOLS = ("get_news", "get_global_news", "get_macro_indicators")
@@ -33,6 +36,25 @@ FUNDAMENTALS_TOOLS = (
     "get_fundamentals", "get_balance_sheet", "get_cashflow", "get_income_statement",
     "get_insider_transactions",
 )
+
+
+def _first_tool_call_only(result: AIMessage, report_key: str) -> AIMessage:
+    """Keep only the first tool call of a reply (DEVIATIONS D9).
+
+    Llama 3.x's chat template refuses a conversation in which one assistant turn holds several
+    tool calls ("This model only supports single tool-calls at once!"), so the next call would
+    fail. The model gets the first tool's answer and can ask for the next one on its next turn.
+    The call log keeps the model's full reply.
+    """
+    if len(result.tool_calls) <= 1:
+        return result
+    dropped = [c["name"] for c in result.tool_calls[1:]]
+    logger.warning("%s: %d tool calls in one turn; running %s, dropping %s", report_key,
+                   len(result.tool_calls), result.tool_calls[0]["name"], dropped)
+    kwargs = dict(result.additional_kwargs)
+    if kwargs.get("tool_calls"):
+        kwargs["tool_calls"] = kwargs["tool_calls"][:1]
+    return result.model_copy(update={"tool_calls": result.tool_calls[:1], "additional_kwargs": kwargs})
 
 
 def _create_tool_analyst(
@@ -55,6 +77,7 @@ def _create_tool_analyst(
             instrument_context=get_instrument_context_from_state(state),
         )
         result = (prompt | llm.bind_tools(tools)).invoke({"messages": state["messages"]})
+        result = _first_tool_call_only(result, report_key)
         report = "" if result.tool_calls else result.content
         return {"messages": [result], report_key: report}
 
