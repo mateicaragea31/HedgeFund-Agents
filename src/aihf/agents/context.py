@@ -55,6 +55,22 @@ def get_instrument_context_from_state(state: Mapping[str, Any]) -> str:
     return build_instrument_context(str(state["company_of_interest"]))
 
 
+def get_portfolio_context_from_state(state: Mapping[str, Any]) -> str:
+    """The current position, or upstream's note that none was given.
+
+    In paper-fidelity mode there is no portfolio context, so the agents read this note: without
+    it they would size as if the account held nothing, which nobody told them.
+    """
+    context = state.get("portfolio_context")
+    if isinstance(context, str) and context.strip():
+        return context
+    return (
+        "Portfolio context: not provided. You do not know the caller's current "
+        "holdings or cash, so do not assume a flat book; give direction and "
+        "sizing guidance in terms the caller can apply to their own position."
+    )
+
+
 def report_or_absent(text: str, source: str) -> str:
     """An analyst's report, or a note saying it was never written (upstream's wording).
 
