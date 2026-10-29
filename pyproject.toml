@@ -10,6 +10,7 @@ requires-python = ">=3.12"
 # Our own implementation of TradingAgents. Never depends on `tradingagents`:
 # ../reference/TradingAgents is reading material only.
 dependencies = [
+    "certifi",  # HTTPS certificates for the SEC collector (already pulled in by openai/httpx)
     "langchain-core>=1.6",
     "langchain-openai>=1.6",
     "langgraph>=1.2",
