@@ -1,20 +1,23 @@
 """The DataSource that reads our point-in-time archive.
 
-It serves prices (the Market Analyst's three tools) and SEC filings (the Fundamentals Analyst's
-five tools); every other method is still a gap note inherited from GapSource. The rest of
-Phase 1.1 adds news, Reddit and macro series here.
+It serves prices (the Market Analyst's three tools), SEC filings (the Fundamentals Analyst's
+five tools) and Reddit posts (the Sentiment Analyst); every other method is still a gap note
+inherited from GapSource. The rest of Phase 1.1 adds news and macro series here.
 """
 
 import os
-from datetime import date
+from datetime import date, datetime, time
 from pathlib import Path
 
 import pandas as pd
 
-from aihf.data.pit import decision_cutoff
+from aihf.agents.context import load_instruments
+from aihf.data.pit import NEW_YORK, decision_cutoff
 from aihf.data.prices import coverage, load_bars
+from aihf.data.reddit import SUBREDDITS, load_posts, missing_months
 from aihf.data.sec import days_before, facts_known_at, form4_known_at, read_meta
 from aihf.tools.market import indicator_window, stock_data_csv, verified_snapshot
+from aihf.tools.reddit import reddit_block
 from aihf.tools.sec import fundamentals_overview, insider_table, statement_table
 from aihf.tools.source import GapSource, gap
 
@@ -22,8 +25,9 @@ from aihf.tools.source import GapSource, gap
 class ArchiveSource(GapSource):
     """Reads <root>/prices/... (see data/prices.py). Dates arrive already clamped by the tools."""
 
-    def __init__(self, root: Path):
+    def __init__(self, root: Path, instruments: dict | None = None):
         self.root = Path(root)
+        self.instruments = instruments if instruments is not None else load_instruments()
 
     @classmethod
     def from_env(cls) -> "ArchiveSource":
@@ -106,3 +110,20 @@ class ArchiveSource(GapSource):
                        reason=f"our Form 4 archive covers {meta.form4_start}..{meta.form4_end} only")
         trades = form4_known_at(self.root, ticker, decision_cutoff(curr_date), since)
         return insider_table(trades, ticker, curr_date, since)
+
+    # --- Reddit posts (data/reddit.py, tools/reddit.py) ---
+
+    def get_reddit_posts(self, ticker, start_date, end_date):
+        """Posts from midnight New York on start_date up to the decision cutoff of end_date.
+
+        Upstream's live search keeps the whole end day (up to midnight UTC), which in a
+        historical run would include posts written after the 16:00 close.
+        """
+        start = datetime.combine(date.fromisoformat(start_date), time(0), tzinfo=NEW_YORK)
+        end = decision_cutoff(end_date)
+        missing = missing_months(self.root, SUBREDDITS, start, end)
+        if missing:
+            return gap("Reddit", f"{start_date}..{end_date}", f"Reddit posts about {ticker}",
+                       reason=f"not in our Reddit archive ({', '.join(missing)})")
+        aliases = (self.instruments.get(ticker.upper()) or {}).get("aliases", [])
+        return reddit_block(load_posts(self.root, SUBREDDITS, start, end), ticker, aliases, SUBREDDITS)
