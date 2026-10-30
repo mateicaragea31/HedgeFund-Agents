@@ -47,7 +47,13 @@ def relevance(query: str, articles: pd.DataFrame) -> pd.Series:
 
 
 def rank_for_query(query: str, articles: pd.DataFrame) -> pd.DataFrame:
-    """The query's articles with at least MIN_QUERY_WORDS words, best score first, then newest."""
+    """The query's articles with at least MIN_QUERY_WORDS words, best score first, then newest.
+
+    Live blogs (".../live/..." links) are left out: their headline and summary are rewritten
+    when the blog closes ("... – as it happened"), so the stored version can include text
+    written after the decision cutoff.
+    """
+    articles = articles[~articles["link"].fillna("").str.contains("/live/", regex=False)]
     if not len(articles):
         return articles
     ranked = articles.assign(_score=relevance(query, articles))
