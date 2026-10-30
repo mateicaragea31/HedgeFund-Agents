@@ -1,22 +1,30 @@
 """The DataSource that reads our point-in-time archive.
 
 It serves prices (the Market Analyst's three tools), SEC filings (the Fundamentals Analyst's
-five tools) and Reddit posts (the Sentiment Analyst); every other method is still a gap note
-inherited from GapSource. The rest of Phase 1.1 adds news and macro series here.
+five tools), Reddit posts (the Sentiment Analyst) and company and global news (News and
+Sentiment Analysts); macro series and StockTwits are still gap notes inherited from GapSource.
 """
 
 import os
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from pathlib import Path
 
 import pandas as pd
 
 from aihf.agents.context import load_instruments
+from aihf.data.news import GLOBAL_NEWS_QUERIES, load_articles, slug
+from aihf.data.news import missing_months as missing_news_months
 from aihf.data.pit import NEW_YORK, decision_cutoff
 from aihf.data.prices import coverage, load_bars
 from aihf.data.reddit import SUBREDDITS, load_posts, missing_months
 from aihf.data.sec import days_before, facts_known_at, form4_known_at, read_meta
 from aihf.tools.market import indicator_window, stock_data_csv, verified_snapshot
+from aihf.tools.news import (
+    GLOBAL_NEWS_ARTICLE_LIMIT,
+    GLOBAL_NEWS_LOOKBACK_DAYS,
+    company_news,
+    global_news,
+)
 from aihf.tools.reddit import reddit_block
 from aihf.tools.sec import fundamentals_overview, insider_table, statement_table
 from aihf.tools.source import GapSource, gap
@@ -111,19 +119,44 @@ class ArchiveSource(GapSource):
         trades = form4_known_at(self.root, ticker, decision_cutoff(curr_date), since)
         return insider_table(trades, ticker, curr_date, since)
 
-    # --- Reddit posts (data/reddit.py, tools/reddit.py) ---
+    # --- Reddit posts (data/reddit.py, tools/reddit.py) and news (data/news.py, tools/news.py) ---
+    #
+    # A window runs from midnight New York on its first day to the decision cutoff of its last.
+    # Upstream's live feeds keep the whole last day (up to midnight UTC), which in a historical
+    # run would include posts and articles published after the 16:00 close.
+
+    @staticmethod
+    def _window(start_date: str, end_date: str) -> tuple[datetime, datetime]:
+        start = datetime.combine(date.fromisoformat(start_date), time(0), tzinfo=NEW_YORK)
+        return start, decision_cutoff(end_date)
 
     def get_reddit_posts(self, ticker, start_date, end_date):
-        """Posts from midnight New York on start_date up to the decision cutoff of end_date.
-
-        Upstream's live search keeps the whole end day (up to midnight UTC), which in a
-        historical run would include posts written after the 16:00 close.
-        """
-        start = datetime.combine(date.fromisoformat(start_date), time(0), tzinfo=NEW_YORK)
-        end = decision_cutoff(end_date)
+        start, end = self._window(start_date, end_date)
         missing = missing_months(self.root, SUBREDDITS, start, end)
         if missing:
             return gap("Reddit", f"{start_date}..{end_date}", f"Reddit posts about {ticker}",
                        reason=f"not in our Reddit archive ({', '.join(missing)})")
         aliases = (self.instruments.get(ticker.upper()) or {}).get("aliases", [])
         return reddit_block(load_posts(self.root, SUBREDDITS, start, end), ticker, aliases, SUBREDDITS)
+
+    def get_news(self, ticker, start_date, end_date):
+        start, end = self._window(start_date, end_date)
+        missing = missing_news_months(self.root, "eodhd", [ticker.upper()], start, end)
+        if missing:
+            return gap("Company news", f"{start_date}..{end_date}", f"news about {ticker}",
+                       reason=f"not in our news archive ({', '.join(missing)})")
+        articles = load_articles(self.root, "eodhd", ticker.upper(), start, end)
+        return company_news(articles, ticker, start_date, end_date)
+
+    def get_global_news(self, curr_date, look_back_days, limit):
+        look_back_days = look_back_days or GLOBAL_NEWS_LOOKBACK_DAYS
+        limit = limit or GLOBAL_NEWS_ARTICLE_LIMIT
+        start_date = f"{date.fromisoformat(curr_date) - timedelta(days=look_back_days)}"
+        start, end = self._window(start_date, curr_date)
+        keys = [slug(q) for q in GLOBAL_NEWS_QUERIES]
+        missing = missing_news_months(self.root, "guardian", keys, start, end)
+        if missing:
+            return gap("Global news", f"{start_date}..{curr_date}", "global news",
+                       reason=f"not in our news archive ({', '.join(missing)})")
+        per_query = [load_articles(self.root, "guardian", k, start, end) for k in keys]
+        return global_news(per_query, start_date, curr_date, limit)
