@@ -5,12 +5,14 @@ never stop the pipeline. One difference, logged in docs/DEVIATIONS.md (D1): vLLM
 to match the form token by token ("guided decoding"); upstream asks for the form as a tool call,
 which the model may ignore.
 
-The form goes to vLLM as `structured_outputs: {"json": <schema>, "disable_any_whitespace": true}`.
-The first version used OpenAI's `response_format` (json_schema), which leaves the model free to
-write whitespace between JSON tokens: in the first 70B backtest (job 288964, 2026-10-30) the
-Portfolio Manager filled 12 of 15 forms with endless whitespace until it was killed. With no free
-whitespace, that can't happen; the answer-length cap (make_chat_model max_tokens) stops any
-other runaway, and a cut-off form falls back to plain text like any broken one.
+The form goes to vLLM as `structured_outputs: {"json": <schema>}`. Guided JSON lets the model write
+whitespace between tokens, and the 70B sometimes writes it without end: in the first 70B
+backtest (job 288964, 2026-10-30) 12 of 15 Portfolio Manager forms ran on until killed. The cure
+is vLLM's server setting `--structured-outputs-config '{"backend": "xgrammar",
+"disable_any_whitespace": true}'` (in the slurm scripts). The per-request field of the same name
+is still sent, but vLLM 0.23's engines ignore it (only the server setting is read; job 289033
+showed a runaway despite it). The answer-length cap (make_chat_model max_tokens) stops any other
+runaway, and a cut-off form falls back to plain text like any broken one.
 
 We check the reply ourselves (pydantic) instead of letting the openai SDK do it, so the
 model's raw reply always reaches the call log, even when it doesn't fit the form.

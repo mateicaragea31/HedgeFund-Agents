@@ -19,6 +19,7 @@ vllm:                                    # flags for `vllm serve` (vLLM 0.23.0, 
   max_model_len: 65536
   gpu_memory_utilization: 0.90
   enable_prefix_caching: true
+  structured_outputs_config: {backend: xgrammar, disable_any_whitespace: true}   # server-side: no free whitespace in forms
   enable_auto_tool_choice: true
   tool_call_parser: llama3_json
   chat_template: configs/templates/tool_chat_template_llama3.1_json.jinja

@@ -65,6 +65,8 @@ apptainer exec "$AGENTS_SIF" "$AGENTS_PY" -m aihf.scripts.run_backtest --experim
 
 echo "== starting vLLM on port $PORT (log: $VLLM_LOG)"
 START=$(date +%s)
+# --structured-outputs-config: no whitespace between JSON tokens in forced forms. It is a server
+# setting (vLLM's engines ignore the per-request field; job 289033), and needs a named backend.
 apptainer exec --nv "$SERVE_SIF" vllm serve "$MODEL_DIR" \
   --served-model-name "$SERVED_NAME" \
   --dtype bfloat16 \
@@ -72,6 +74,7 @@ apptainer exec --nv "$SERVE_SIF" vllm serve "$MODEL_DIR" \
   --max-model-len "$MAX_MODEL_LEN" \
   --gpu-memory-utilization 0.90 \
   --enable-prefix-caching \
+  --structured-outputs-config '{"backend": "xgrammar", "disable_any_whitespace": true}' \
   --enable-auto-tool-choice --tool-call-parser llama3_json \
   --chat-template "$CHAT_TEMPLATE" \
   --seed 0 --host 127.0.0.1 --port "$PORT" > "$VLLM_LOG" 2>&1 &

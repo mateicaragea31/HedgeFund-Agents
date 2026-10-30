@@ -28,6 +28,11 @@ _RATING_LABEL_RE = re.compile(r"rating\b[^:\-‐-―]*[:\-‐-―][\s*]*(\w+)",
 # A line presenting the scale rather than a decision ("Rating Scale: Buy, ...").
 _RATING_SCALE_RE = re.compile(r"rating\s*(scale|options|legend)", re.IGNORECASE)
 
+# Ours (DEVIATIONS D16): "Rating" written as a heading, with the rating alone on the next line —
+# "## Rating\nHold", "**Rating**\n**Hold**". Upstream's label pattern needs both on one line.
+_RATING_HEADING_RE = re.compile(r"^[#*\s]*rating[*:\s]*$", re.IGNORECASE)
+_RATING_ALONE_RE = re.compile(r"^[\s*_\-]*(" + "|".join(RATINGS_5_TIER) + r")[\s*_.]*$", re.IGNORECASE)
+
 # Standalone 5-tier word anywhere (word boundaries so "Buyer"/"Holding" don't match).
 _RATING_WORD_RE = re.compile(
     r"\b(" + "|".join(RATINGS_5_TIER) + r")\b", re.IGNORECASE
@@ -37,10 +42,11 @@ _RATING_WORD_RE = re.compile(
 def extract_rating(text: str) -> str | None:
     """The 5-tier rating in `text`, or None if there is none.
 
-    Two passes on the NFKC-normalized text (so fullwidth punctuation like "Rating：Overweight"
+    Passes on the NFKC-normalized text (so fullwidth punctuation like "Rating：Overweight"
     reads the same as ASCII):
     1. An explicit "Rating: X" label (the last one, skipping lines that list the scale).
-    2. Otherwise, the rating word, if exactly one of the five appears in the text.
+    2. Ours: a "Rating" heading with the rating alone on the next line (the last such pair).
+    3. Otherwise, the rating word, if exactly one of the five appears in the text.
     """
     if not text:
         return None
@@ -56,6 +62,16 @@ def extract_rating(text: str) -> str | None:
         m = _RATING_LABEL_RE.search(line)
         if m and m.group(1).lower() in _RATING_SET:
             labelled = m.group(1).capitalize()
+    if labelled:
+        return labelled
+
+    # A "Rating" heading followed by a line holding only the rating (the next non-empty line).
+    lines = [line for line in norm.splitlines() if line.strip()]
+    for heading, following in zip(lines, lines[1:], strict=False):
+        if _RATING_HEADING_RE.match(heading):
+            m = _RATING_ALONE_RE.match(following)
+            if m:
+                labelled = m.group(1).capitalize()
     if labelled:
         return labelled
 
