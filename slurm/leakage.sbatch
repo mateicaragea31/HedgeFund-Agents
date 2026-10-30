@@ -89,7 +89,7 @@ echo "== waiting for vLLM to be ready (up to $WAIT_MIN min)"
 ready=0
 for i in $(seq 1 $(( WAIT_MIN * 6 ))); do
   if curl -sf "http://127.0.0.1:$PORT/health" > /dev/null; then
-    echo "vLLM ready after $(( $(date +%s) - START )) s"; ready=1; break
+    READY_AT=$(date +%s); echo "vLLM ready after $(( READY_AT - START )) s"; ready=1; break
   fi
   if ! kill -0 "$VLLM_PID" 2>/dev/null; then
     echo "vLLM stopped while starting. Last lines of its log:"; tail -50 "$VLLM_LOG"; exit 1
@@ -105,7 +105,9 @@ status=0
 apptainer exec "$AGENTS_SIF" "$AGENTS_ENV/bin/python" -m aihf.scripts.leakage_probe \
   --model "$MODEL_CONFIG" --backend-url "http://127.0.0.1:$PORT/v1" || status=$?
 
-echo "== vLLM speed (last lines of its log)"
-grep "generation throughput" "$VLLM_LOG" | tail -3 || true
+echo "== measurements for planning (vLLM log)"
+echo "load time: $(( READY_AT - START )) s"
+grep -E "KV cache size|Maximum concurrency|Loading weights took|Model loading took" "$VLLM_LOG" | sed 's/^.*INFO/INFO/' | head -6 || true
+grep "generation throughput" "$VLLM_LOG" | tail -3 | sed 's/^.*Avg prompt/Avg prompt/' || true
 echo "== done, exit code $status"
 exit "$status"
