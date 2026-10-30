@@ -86,6 +86,10 @@ def score_rows(rows: list[dict]) -> pd.DataFrame:
             rec["naive_error"] = _error(r["naive"], r["truth"], unit)
             rec["beats_naive"] = (rec["error"] < rec["naive_error"]
                                   if rec["error"] is not None and rec["naive_error"] is not None else None)
+            latest = r.get("naive_latest")
+            rec["latest_error"] = _error(latest, r["truth"], unit) if latest is not None and latest == latest else None
+            rec["beats_latest"] = (rec["error"] < rec["latest_error"]
+                                   if rec["error"] is not None and rec["latest_error"] is not None else None)
         else:
             rec["correct"] = parsed == r["truth"]
         out.append(rec)
@@ -101,11 +105,14 @@ def summarize(scored: pd.DataFrame) -> pd.DataFrame:
             row.update(accuracy=round(float(g["correct"].mean()), 3), chance=CHANCE[kind])
         else:
             ok = g[g["error"].notna()]
-            row.update(error_unit="%" if (g["error_unit"] == "pct").all() else "mixed/points",
+            row.update(error_unit="%" if (g["error_unit"] == "pct").all() else "abs",
                        median_error=round(float(ok["error"].median()), 4) if len(ok) else None,
                        median_naive_error=round(float(g["naive_error"].median()), 4)
                        if g["naive_error"].notna().any() else None,
                        beats_naive=round(float(ok["beats_naive"].dropna().mean()), 3)
                        if ok["beats_naive"].notna().any() else None)
+            if "latest_error" in g and g["latest_error"].notna().any():
+                row.update(median_latest_error=round(float(g["latest_error"].median()), 4),
+                           beats_latest=round(float(ok["beats_latest"].dropna().mean()), 3))
         rows.append(row)
     return pd.DataFrame(rows)

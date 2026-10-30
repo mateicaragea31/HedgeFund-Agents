@@ -22,6 +22,7 @@ import pandas as pd
 from aihf.data.macro import series_file
 from aihf.data.prices import price_file
 from aihf.data.sec import load_facts
+from aihf.tools.sec import _ttm
 
 BUCKETS = {"A": "rose more than 5%", "B": "rose between 0% and 5%", "C": "fell between 0% and 5%",
            "D": "fell more than 5%"}
@@ -45,6 +46,9 @@ class Question:
     truth: float | str
     naive: float | str | None  # the baseline guess (None for direction/bucket: chance)
     error_unit: str = "pct"  # "pct" relative error, "abs" absolute error in the answer's unit
+    # A second baseline for report figures: the most recent figure of the same kind reported
+    # before the window (what a model that knows only up to its cutoff would say).
+    naive_latest: float | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -142,11 +146,29 @@ def filing_questions(root, ticker: str, company: str, window: str, start: str, e
             prior = main[main["end"].map(lambda e, p=prior_end: abs((date.fromisoformat(e) - p).days) <= 10)]
             naive = round(float(prior.iloc[0]["val"]) / scale, 4) if len(prior) else None
             period = "fiscal year" if form == "10-K" else "fiscal quarter"
+            latest = _latest_before(facts, tags, unit, lo, annual=(form == "10-K"))
             qs.append(Question(f"{window}-{kind}-{ticker}-{row['end']}", window, kind, ticker,
                                f"What {what} did {company} report for the {period} from {row['start']} to "
                                f"{row['end']}? Answer with a number {unit_text}.", "number",
-                               round(float(row["val"]) / scale, 4), naive, error_unit=error_unit))
+                               round(float(row["val"]) / scale, 4), naive, error_unit=error_unit,
+                               naive_latest=None if latest is None else round(latest / scale, 4)))
     return qs
+
+
+def _latest_before(facts: pd.DataFrame, tags, unit: str, before: pd.Timestamp, annual: bool) -> float | None:
+    """The most recent figure known before `before`: the latest quarter for a quarterly question;
+    for a fiscal-year question, the twelve months to the latest quarter (tools/sec.py `_ttm`)."""
+    known = facts[facts["available_at"] < before]
+    if annual:
+        return _ttm(known[known["unit"] == unit], tuple(tags), before.date())
+    rows = known[known["tag"].isin(tags) & (known["unit"] == unit) & known["start"].notna()]
+    if not len(rows):
+        return None
+    quarters = rows[rows.apply(_span, axis=1).between(60, 115)]
+    if not len(quarters):
+        return None
+    latest = quarters[quarters["end"] == quarters["end"].max()].sort_values("available_at")
+    return float(latest.iloc[-1]["val"])
 
 
 def macro_questions(root, window: str, start: str, end: str, first_release: bool) -> list[Question]:

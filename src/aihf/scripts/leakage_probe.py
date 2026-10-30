@@ -22,7 +22,7 @@ import pandas as pd
 
 from aihf.agents.context import load_instruments
 from aihf.config import REPO, load_model
-from aihf.leakage.questions import Question, build_questions
+from aihf.leakage.questions import build_questions
 from aihf.leakage.scoring import score_rows, summarize
 from aihf.llm import JsonlCallLog, make_chat_model
 
@@ -99,17 +99,22 @@ def main(argv: list[str] | None = None) -> int:
 
     model = load_model(REPO / args.model if not args.model.is_absolute() else args.model)
     out = args.out or REPO / "results" / "leakage" / model.name
+    root = Path(os.environ["AIHF_DATA"]) / "archive"
+    windows = {"test": tuple(args.test_window), "control": tuple(args.control_window)}
     if args.rescore:
-        saved = pd.read_json(out / "answers.jsonl", lines=True)
-        keep = [c for c in saved.columns if c in {*Question.__dataclass_fields__, "reply", "mode"}]
-        scored = score_rows(saved[keep].to_dict("records"))
+        # The questions are rebuilt from the archive (so new baselines apply) and matched to the
+        # saved replies by question id.
+        saved = pd.read_json(out / "answers.jsonl", lines=True).set_index("id")
+        rebuilt = build_questions(root, load_instruments(), TICKERS, windows)
+        rows = [{**q.to_dict(), "reply": saved.at[q.id, "reply"], "mode": saved.at[q.id, "mode"]
+                 if "mode" in saved else "unknown"} for q in rebuilt if q.id in saved.index]
+        logger.info("rescoring %d saved answers (%d questions rebuilt)", len(rows), len(rebuilt))
+        scored = score_rows(rows)
         scored.to_json(out / "answers.jsonl", orient="records", lines=True)
         summary = summarize(scored)
         summary.to_csv(out / "summary.csv", index=False)
         logger.info("rescored %s\n%s", out, summary.to_string(index=False))
         return 0
-    root = Path(os.environ["AIHF_DATA"]) / "archive"
-    windows = {"test": tuple(args.test_window), "control": tuple(args.control_window)}
     questions = build_questions(root, load_instruments(), TICKERS, windows)
     counts = {}
     for q in questions:
