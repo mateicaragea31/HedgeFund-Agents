@@ -20,6 +20,7 @@ from pathlib import Path
 from typing import Literal
 
 import pandas as pd
+from openai import LengthFinishReasonError
 from pydantic import BaseModel
 
 from aihf.agents.context import load_instruments
@@ -54,12 +55,34 @@ class LetterAnswer(BaseModel):
 FORMS = {"number": NumberAnswer, "higher/lower": DirectionAnswer, "letter": LetterAnswer}
 
 
+def ask_one(llm, q) -> tuple[str, str]:
+    """(reply, how it was obtained). One question never stops the run.
+
+    - "form": the forced answer form, as intended.
+    - "cut-off form": the form hit the token cap (e.g. an endless number "185.1400000…"); the
+      text written so far is kept and parsed as text.
+    - "text fallback": the form request failed otherwise; asked once more as plain text.
+    """
+    messages = [("system", SYSTEM), ("human", q.text)]
+    try:
+        form = response_format(FORMS[q.answer_format])
+        return llm.bind(response_format=form).invoke(messages).content, "form"
+    except LengthFinishReasonError as exc:
+        return exc.completion.choices[0].message.content or "", "cut-off form"
+    except Exception as exc:
+        logger.warning("%s: form failed (%s); asking as plain text", q.id, exc)
+        try:
+            return llm.invoke(messages).content, "text fallback"
+        except Exception as exc2:
+            logger.error("%s: no answer (%s)", q.id, exc2)
+            return "", "error"
+
+
 def ask_all(llm, questions) -> list[dict]:
     rows = []
     for i, q in enumerate(questions, 1):
-        form = response_format(FORMS[q.answer_format])
-        reply = llm.bind(response_format=form).invoke([("system", SYSTEM), ("human", q.text)]).content
-        rows.append({**q.to_dict(), "reply": reply})
+        reply, mode = ask_one(llm, q)
+        rows.append({**q.to_dict(), "reply": reply, "mode": mode})
         if i % 25 == 0:
             logger.info("%d / %d answered", i, len(questions))
     return rows
@@ -88,7 +111,7 @@ def main(argv: list[str] | None = None) -> int:
     out = args.out or REPO / "results" / "leakage" / model.name
     if args.rescore:
         saved = pd.read_json(out / "answers.jsonl", lines=True)
-        keep = [c for c in saved.columns if c in {*Question.__dataclass_fields__, "reply"}]
+        keep = [c for c in saved.columns if c in {*Question.__dataclass_fields__, "reply", "mode"}]
         scored = score_rows(saved[keep].to_dict("records"))
         scored.to_json(out / "answers.jsonl", orient="records", lines=True)
         summary = summarize(scored)
@@ -113,12 +136,13 @@ def main(argv: list[str] | None = None) -> int:
     out.mkdir(parents=True, exist_ok=True)
     (out / "questions.jsonl").write_text("".join(json.dumps(q.to_dict()) + "\n" for q in questions))
     (out / "llm_log.jsonl").unlink(missing_ok=True)
-    llm = make_chat_model(args.backend_url, model.name, temperature=0, max_tokens=60,
+    llm = make_chat_model(args.backend_url, model.name, temperature=0, max_tokens=100,
                           callbacks=[JsonlCallLog(out / "llm_log.jsonl")])
     scored = score_rows(ask_all(llm, questions))
     scored.to_json(out / "answers.jsonl", orient="records", lines=True)
     summary = summarize(scored)
     summary.to_csv(out / "summary.csv", index=False)
+    logger.info("how answers were obtained: %s", scored["mode"].value_counts().to_dict())
     meta = {"model": model.name, "revision": model.revision, "knowledge_cutoff": str(model.knowledge_cutoff),
             "windows": windows, "questions": len(questions), "finished_at": datetime.now(UTC).isoformat(),
             "git_commit": os.environ.get("AIHF_GIT_COMMIT", "unknown")}
