@@ -7,6 +7,7 @@ chance level. Leakage shows up as the test window looking like the control windo
 below the naive guess, or accuracy well above chance.
 """
 
+import json
 import re
 
 import pandas as pd
@@ -15,19 +16,44 @@ _NUMBER = re.compile(r"-?\d[\d,]*\.?\d*")
 CHANCE = {"direction": 0.5, "bucket": 0.25}
 
 
+_DATES = re.compile(
+    r"\d{4}-\d{2}(-\d{2})?"  # 2024-01-09, 2024-01
+    r"|(January|February|March|April|May|June|July|August|September|October|November|December)"
+    r"\s+\d{1,2}(st|nd|rd|th)?,?\s+\d{4}"  # January 9, 2024
+    r"|\b(19|20)\d{2}\b")  # a bare year
+
+
+def _json_answer(text: str):
+    """The "answer" of a JSON form reply ({"answer": 185.6}), or None if the reply isn't one."""
+    try:
+        value = json.loads(text)
+    except ValueError:
+        return None
+    return value.get("answer") if isinstance(value, dict) else None
+
+
 def parse_answer(reply: str, answer_format: str):
     """The answer in the asked format, or None if it can't be read.
 
-    "$185.64" → 185.64; "1,234.5" → 1234.5; "Higher." → "higher"; "B) rose…" → "B".
-    For a number, the first one in the reply counts.
+    A JSON form reply ({"answer": ...}) is read directly. Free text, the fallback:
+    "$185.64" → 185.64; "1,234.5 billion" → 1234.5; "Higher." → "higher"; "B) rose…" → "B".
+    Dates and years are skipped ("…on 2024-01-09 was $185" → 185), and a refusal with no other
+    number ("I'm not aware of the price on 2024-01-09") gives None.
     """
     text = (reply or "").strip()
+    form = _json_answer(text)
+    if form is not None:
+        text = str(form)
     if answer_format == "number":
-        match = _NUMBER.search(text.replace("$", ""))
-        if not match:
+        if isinstance(form, int | float):
+            return float(form)
+        cleaned = _DATES.sub(" ", text)
+        dollar = re.search(r"\$\s*(-?\d[\d,]*\.?\d*)", cleaned)
+        match = dollar.group(1) if dollar else (m.group() if (m := _NUMBER.search(cleaned)) else None)
+        if match is None:
             return None
         try:
-            return float(match.group().replace(",", ""))
+            return float(match.replace(",", ""))
         except ValueError:
             return None
     if answer_format == "higher/lower":
