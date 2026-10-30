@@ -80,8 +80,10 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--model", type=Path, required=True, help="configs/models/<name>.yaml")
     p.add_argument("--backend-url", help="vLLM server, e.g. http://127.0.0.1:28152/v1")
-    p.add_argument("--test-window", nargs=2, default=["2024-01-02", "2024-03-28"])
-    p.add_argument("--control-window", nargs=2, default=["2023-01-03", "2023-03-31"])
+    # First halves of the years: still after the cutoff for 2024 (prices are archived to
+    # 2024-06-28), and twice the reports and weeks of the paper window alone, for statistical power.
+    p.add_argument("--test-window", nargs=2, default=["2024-01-02", "2024-06-28"])
+    p.add_argument("--control-window", nargs=2, default=["2023-01-03", "2023-06-30"])
     p.add_argument("--out", type=Path, help="default: results/leakage/<model name>")
     p.add_argument("--dry-run", action="store_true", help="build and show the questions, ask nothing")
     p.add_argument("--rescore", action="store_true",
