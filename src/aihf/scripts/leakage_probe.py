@@ -17,18 +17,14 @@ import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal
 
 import pandas as pd
-from openai import LengthFinishReasonError
-from pydantic import BaseModel
 
 from aihf.agents.context import load_instruments
 from aihf.config import REPO, load_model
 from aihf.leakage.questions import Question, build_questions
 from aihf.leakage.scoring import score_rows, summarize
 from aihf.llm import JsonlCallLog, make_chat_model
-from aihf.llm.structured import response_format
 
 logger = logging.getLogger("leakage_probe")
 
@@ -38,39 +34,31 @@ SYSTEM = ("You are a financial analyst. Answer from your own knowledge only: you
 TICKERS = ["AAPL", "GOOGL", "AMZN", "SPY"]
 
 
-# The answer forms: vLLM's guided decoding makes the model fill one, so it always gives a
-# best guess and can't refuse (a model that doesn't know guesses no better than the baseline).
-class NumberAnswer(BaseModel):
-    answer: float
-
-
-class DirectionAnswer(BaseModel):
-    answer: Literal["higher", "lower"]
-
-
-class LetterAnswer(BaseModel):
-    answer: Literal["A", "B", "C", "D"]
-
-
-FORMS = {"number": NumberAnswer, "higher/lower": DirectionAnswer, "letter": LetterAnswer}
+# The answer shapes: vLLM's structured outputs make the reply exactly one of them, so the model
+# always gives a best guess and can't refuse (a model that doesn't know guesses no better than
+# the baseline). Plain choices and a short number pattern, no JSON: guided JSON let the 8B write
+# endless whitespace or digits until the token cap (job 288910).
+NUMBER = r"-?[0-9]{1,6}(\.[0-9]{1,3})?"
+SHAPES = {
+    "number": {"regex": NUMBER},
+    "higher/lower": {"choice": ["higher", "lower"]},
+    "letter": {"choice": ["A", "B", "C", "D"]},
+}
 
 
 def ask_one(llm, q) -> tuple[str, str]:
     """(reply, how it was obtained). One question never stops the run.
 
-    - "form": the forced answer form, as intended.
-    - "cut-off form": the form hit the token cap (e.g. an endless number "185.1400000…"); the
-      text written so far is kept and parsed as text.
-    - "text fallback": the form request failed otherwise; asked once more as plain text.
+    - "constrained": the reply in the forced shape, as intended.
+    - "text fallback": the constrained request failed; asked once more as plain text.
+    - "error": both failed (the reply is empty and counts as unanswered).
     """
     messages = [("system", SYSTEM), ("human", q.text)]
     try:
-        form = response_format(FORMS[q.answer_format])
-        return llm.bind(response_format=form).invoke(messages).content, "form"
-    except LengthFinishReasonError as exc:
-        return exc.completion.choices[0].message.content or "", "cut-off form"
+        shape = {"structured_outputs": SHAPES[q.answer_format]}
+        return llm.bind(extra_body=shape).invoke(messages).content, "constrained"
     except Exception as exc:
-        logger.warning("%s: form failed (%s); asking as plain text", q.id, exc)
+        logger.warning("%s: constrained request failed (%s); asking as plain text", q.id, exc)
         try:
             return llm.invoke(messages).content, "text fallback"
         except Exception as exc2:
@@ -136,7 +124,7 @@ def main(argv: list[str] | None = None) -> int:
     out.mkdir(parents=True, exist_ok=True)
     (out / "questions.jsonl").write_text("".join(json.dumps(q.to_dict()) + "\n" for q in questions))
     (out / "llm_log.jsonl").unlink(missing_ok=True)
-    llm = make_chat_model(args.backend_url, model.name, temperature=0, max_tokens=100,
+    llm = make_chat_model(args.backend_url, model.name, temperature=0, max_tokens=20,
                           callbacks=[JsonlCallLog(out / "llm_log.jsonl")])
     scored = score_rows(ask_all(llm, questions))
     scored.to_json(out / "answers.jsonl", orient="records", lines=True)
