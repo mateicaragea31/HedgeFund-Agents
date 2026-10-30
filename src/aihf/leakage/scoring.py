@@ -78,8 +78,12 @@ def score_rows(rows: list[dict]) -> pd.DataFrame:
         parsed = parse_answer(r["reply"], r["answer_format"])
         rec = {**r, "parsed": parsed, "parsed_ok": parsed is not None}
         if r["answer_format"] == "number":
-            rec["error"] = _error(parsed, r["truth"], r["error_unit"])
-            rec["naive_error"] = _error(r["naive"], r["truth"], r["error_unit"])
+            # EPS can be near zero or negative (Amazon 2022: -0.27), where a relative error explodes:
+            # score it in dollars, like the rates are scored in points.
+            unit = "abs" if r["kind"] == "eps" else r["error_unit"]
+            rec["error_unit"] = unit
+            rec["error"] = _error(parsed, r["truth"], unit)
+            rec["naive_error"] = _error(r["naive"], r["truth"], unit)
             rec["beats_naive"] = (rec["error"] < rec["naive_error"]
                                   if rec["error"] is not None and rec["naive_error"] is not None else None)
         else:
