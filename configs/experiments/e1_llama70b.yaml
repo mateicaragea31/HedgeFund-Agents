@@ -1,0 +1,17 @@
+# E1 (CLAUDE.md §6.5): the main replication. Llama-3.3-70B as both quick and deep model, the
+# paper's window and tickers, upstream's defaults (4 analysts, 1 debate round, 1 risk round),
+# memory on, the model's own sampling defaults, 3 repeats. Simulator settings come in §6.4.
+name: e1_llama70b_paper_window
+phase: 1
+tickers: [AAPL, GOOGL, AMZN]
+window: {start: 2024-01-02, end: 2024-03-28}
+model_profile: configs/models/llama33_70b_main.yaml   # knowledge_cutoff: 2023-12-31; 3 GPUs, PP 3
+quick_model: llama-3.3-70b
+deep_model: llama-3.3-70b
+analysts: [market, social, news, fundamentals]
+max_debate_rounds: 1
+max_risk_discuss_rounds: 1
+memory: true
+holding_period_days: 5
+sampling: {temperature: model_default}
+repeats: 3

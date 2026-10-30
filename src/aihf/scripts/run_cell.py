@@ -98,13 +98,15 @@ def run(
     deep_llm,
     data,
     cell_dir: Path,
-    memory_path: Path,
+    memory_path: Path | None = None,
+    past_context: str | None = None,
     extra: dict | None = None,
 ) -> dict:
     """Run the cell and write state.json + report.json into cell_dir. Returns the report.
 
     The models (with their call log already attached) and the DataSource are passed in, so
-    tests can run this with a fake model and a fake archive.
+    tests can run this with a fake model and a fake archive. `past_context`: the lessons known on
+    the trade date (the backtest runner computes them); if None, they are read from memory_path.
     """
     cell_dir.mkdir(parents=True, exist_ok=True)
     logged = LoggedSource(data)
@@ -112,7 +114,9 @@ def run(
                 "tool_calls_dropped_turns": ("aihf.agents.analysts", _WarningCounter())}
     for name, counter in counters.values():
         logging.getLogger(name).addHandler(counter)
-    past_context = DecisionLog(memory_path).get_past_context(ticker, as_of=trade_date) if experiment.memory else ""
+    if past_context is None:  # the backtest runner passes the lessons in; a single cell reads them
+        past_context = (DecisionLog(memory_path).get_past_context(ticker, as_of=trade_date)
+                        if experiment.memory and memory_path is not None else "")
     report = {
         "ticker": ticker,
         "trade_date": trade_date,

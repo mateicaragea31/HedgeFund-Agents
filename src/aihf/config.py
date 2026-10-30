@@ -52,7 +52,7 @@ class Sampling(_Strict):
 
 
 class ExperimentConfig(_Strict):
-    """configs/experiments/<name>.yaml. Fields for the backtest (repeats, simulator) come in §6.3."""
+    """configs/experiments/<name>.yaml. The simulator's fields come in §6.4."""
 
     name: str
     phase: int
@@ -67,6 +67,7 @@ class ExperimentConfig(_Strict):
     memory: bool = True
     holding_period_days: int = 5
     sampling: Sampling = Sampling()
+    repeats: int = 1  # independent runs of the whole experiment (CLAUDE.md §3.5: at least 3)
 
     @model_validator(mode="after")
     def _check(self):
