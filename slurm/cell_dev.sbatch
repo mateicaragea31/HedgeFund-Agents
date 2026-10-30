@@ -3,9 +3,10 @@
 # `dev` model (Llama-3.1-8B, 1 GPU). Same start-up as smoke_dev.sbatch, then run_cell.
 # Output: results/dev/<TICKER>_<DATE>/{state.json, llm_log.jsonl, report.json}.
 #
-# Submit from FEP (TICKER and DATE are optional):
+# Submit from FEP (TICKER, DATE and FORCE are optional):
 #   cd $AIHF_WS/AI_HedgeFund && mkdir -p logs && sbatch slurm/cell_dev.sbatch
 #   sbatch --export=ALL,TICKER=AAPL,DATE=2024-01-11 slurm/cell_dev.sbatch
+#   sbatch --export=ALL,FORCE=1 slurm/cell_dev.sbatch     # run a finished cell again
 #
 #SBATCH --job-name=aihf-cell-dev
 #SBATCH --partition=dgxa100
@@ -92,7 +93,7 @@ echo "== running the cell"
 status=0
 apptainer exec "$AGENTS_SIF" "$AGENTS_ENV/bin/python" -m aihf.scripts.run_cell \
   --experiment "$EXPERIMENT" --ticker "$TICKER" --date "$DATE" \
-  --backend-url "http://127.0.0.1:$PORT/v1" || status=$?
+  --backend-url "http://127.0.0.1:$PORT/v1" ${FORCE:+--force} || status=$?
 
 echo "== last lines of the vLLM log"
 tail -20 "$VLLM_LOG"

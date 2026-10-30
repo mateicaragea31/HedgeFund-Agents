@@ -5,7 +5,11 @@ and the Sentiment Analyst's direct fetches. The cell report lists these requests
 shows plainly which inputs were real data and which were "unavailable" notes.
 """
 
+import re
+
 from aihf.tools.source import DataSource
+
+_DATE = re.compile(r"(?<!\d)(20\d\d-\d\d-\d\d)(?!\d)")
 
 
 def is_gap(text: str) -> bool:
@@ -34,7 +38,9 @@ class LoggedSource:
             except Exception as exc:
                 record.update(gap=False, chars=0, error=f"{type(exc).__name__}: {exc}")
                 raise
-            record.update(gap=is_gap(result), chars=len(result), error=None)
+            dates = _DATE.findall(result)
+            record.update(gap=is_gap(result), chars=len(result), error=None,
+                          latest_date=max(dates) if dates else None)  # for the look-ahead check
             return result
 
         return logged

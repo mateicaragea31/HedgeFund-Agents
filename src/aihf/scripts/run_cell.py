@@ -149,6 +149,11 @@ def run(
     report["gaps"] = sorted({r["method"] for r in logged.requests if r.get("gap")})
     report["real_data"] = sorted({r["method"] for r in logged.requests
                                   if r.get("gap") is False and not r.get("error")})
+    # Look-ahead check: answers mentioning a date after the trade date, to inspect by hand (a
+    # news summary may name a scheduled date such as a launch day; a price or filing must not).
+    report["dates_after_trade_date"] = [
+        {"method": r["method"], "args": r["args"], "latest_date": r["latest_date"]}
+        for r in logged.requests if (r.get("latest_date") or "") > trade_date]
     (cell_dir / "report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     return report
 
@@ -214,6 +219,8 @@ def main(argv: list[str] | None = None) -> int:
                 llm["calls"], llm["input_tokens"], llm["output_tokens"], llm["structured_fallbacks"],
                 llm["tool_calls_dropped_turns"])
     logger.info("gaps: %s; real data: %s", report["gaps"], report["real_data"])
+    logger.info("answers mentioning a date after %s: %d %s", args.date, len(report["dates_after_trade_date"]),
+                report["dates_after_trade_date"][:5])
     if report["error"]:
         logger.error("cell failed: %s", report["error"])
         return 1
