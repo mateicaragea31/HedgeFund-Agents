@@ -1,9 +1,16 @@
 """Ask the model to fill in a form (structured output), with plain text as plan B.
 
 Follows upstream's `agents/structured.py` (`invoke_structured_or_freetext`): a failed form must
-never stop the pipeline. One difference, logged in docs/DEVIATIONS.md: we send a JSON schema
-("json_schema" response format), so vLLM forces the reply to match the form token by token
-("guided decoding"); upstream asks for the form as a tool call, which the model may ignore.
+never stop the pipeline. One difference, logged in docs/DEVIATIONS.md (D1): vLLM forces the reply
+to match the form token by token ("guided decoding"); upstream asks for the form as a tool call,
+which the model may ignore.
+
+The form goes to vLLM as `structured_outputs: {"json": <schema>, "disable_any_whitespace": true}`.
+The first version used OpenAI's `response_format` (json_schema), which leaves the model free to
+write whitespace between JSON tokens: in the first 70B backtest (job 288964, 2026-10-30) the
+Portfolio Manager filled 12 of 15 forms with endless whitespace until it was killed. With no free
+whitespace, that can't happen; the answer-length cap (make_chat_model max_tokens) stops any
+other runaway, and a cut-off form falls back to plain text like any broken one.
 
 We check the reply ourselves (pydantic) instead of letting the openai SDK do it, so the
 model's raw reply always reaches the call log, even when it doesn't fit the form.
@@ -30,6 +37,14 @@ def response_format(schema: type[BaseModel]) -> dict:
     }
 
 
+def structured_outputs(llm: Any, schema: type[BaseModel]) -> dict:
+    """The request's extra body: vLLM's guided JSON for `schema`, no whitespace allowed between
+    tokens. Keeps whatever extra body the model already sends (e.g. gpt-oss's reasoning_effort)."""
+    base = dict(getattr(llm, "extra_body", None) or {})
+    base["structured_outputs"] = {"json": to_strict_json_schema(schema), "disable_any_whitespace": True}
+    return base
+
+
 # `[T: BaseModel]` (Python 3.12) says: T is some form class, and the function returns a form of
 # that same class. So invoke_structured(llm, Decision, ...) gives back a Decision.
 def invoke_structured[T: BaseModel](
@@ -42,7 +57,7 @@ def invoke_structured[T: BaseModel](
     (e.g. the rating parser marks it REVIEW if no rating can be read from it).
     """
     try:
-        reply = llm.bind(response_format=response_format(schema)).invoke(messages)
+        reply = llm.bind(extra_body=structured_outputs(llm, schema)).invoke(messages)
         return schema.model_validate_json(reply.content), reply.content
     except Exception as exc:  # server error, invalid JSON, a value not allowed by the form, ...
         problem = exc

@@ -3,7 +3,8 @@
 # Model path, name and GPU layout come from the yaml files (aihf.scripts.model_env).
 # Output: results/<run_id>/ (see src/aihf/scripts/run_backtest.py). Exit 3 = deadline: submit again.
 #
-# Submit from FEP (EXPERIMENT is required; REPEAT defaults to 0; DATES limits a test run):
+# Submit from FEP (EXPERIMENT is required; REPEAT defaults to 0; DATES limits a test run;
+# MAX_WORKERS (default 15) and CELL_TIMEOUT (minutes, default 60) tune the runner):
 #   cd $AIHF_WS/AI_HedgeFund && mkdir -p logs
 #   sbatch --export=ALL,EXPERIMENT=configs/experiments/e1_llama70b.yaml,REPEAT=0 slurm/backtest.sbatch
 #   sbatch --export=ALL,EXPERIMENT=configs/experiments/e1_llama70b.yaml,DATES=10 slurm/backtest.sbatch
@@ -96,7 +97,8 @@ echo "== running the backtest (deadline in $DEADLINE min)"
 status=0
 apptainer exec "$AGENTS_SIF" "$AGENTS_PY" -m aihf.scripts.run_backtest --experiment "$EXPERIMENT" \
   --repeat "$REPEAT" ${DATES:+--dates "$DATES"} --backend-url "http://127.0.0.1:$PORT/v1" \
-  --deadline-minutes "$DEADLINE" || status=$?
+  --deadline-minutes "$DEADLINE" --max-workers "${MAX_WORKERS:-15}" \
+  --cell-timeout-minutes "${CELL_TIMEOUT:-60}" || status=$?
 
 echo "== vLLM throughput (last lines)"
 grep "generation throughput" "$VLLM_LOG" | tail -5 | sed 's/^.*Avg prompt/Avg prompt/' || true

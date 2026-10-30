@@ -41,9 +41,9 @@ def work(cfg: WorkerConfig, job: CellJob) -> None:
     (job.cell_dir / "llm_log.jsonl").unlink(missing_ok=True)  # an attempt starts a fresh log
     log = JsonlCallLog(job.cell_dir / "llm_log.jsonl")
     quick = make_chat_model(cfg.backend_url, experiment.quick_model, temperature=experiment.temperature,
-                            callbacks=[log])
+                            max_tokens=experiment.max_tokens, callbacks=[log])
     deep = make_chat_model(cfg.backend_url, experiment.deep_model, temperature=experiment.temperature,
-                           callbacks=[log])
+                           max_tokens=experiment.max_tokens, callbacks=[log])
     report = run(experiment, model, job.ticker, job.trade_date, quick_llm=quick, deep_llm=deep,
                  data=ArchiveSource(Path(cfg.archive_root)), cell_dir=job.cell_dir,
                  past_context=job.past_context, extra={"backend_url": cfg.backend_url})

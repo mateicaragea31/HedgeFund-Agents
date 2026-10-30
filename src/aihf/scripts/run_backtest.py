@@ -49,7 +49,7 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--backend-url", help="vLLM server, e.g. http://127.0.0.1:28152/v1")
     p.add_argument("--dates", type=int, help="run only the first N trade dates (test runs); same run folder")
     p.add_argument("--max-workers", type=int, default=15, help="cells at the same time")
-    p.add_argument("--cell-timeout-minutes", type=float, default=30)
+    p.add_argument("--cell-timeout-minutes", type=float, default=60)
     p.add_argument("--retries", type=int, default=2, help="extra attempts for a failed cell")
     p.add_argument("--deadline-minutes", type=float, help="stop starting cells after this long (12 h job: 690)")
     p.add_argument("--run-id", help="continue this run folder instead of the one the inputs hash to")
@@ -113,6 +113,7 @@ def main(argv: list[str] | None = None) -> int:
     settle = None
     if memory is not None:
         reflector = make_chat_model(args.backend_url, experiment.quick_model, temperature=experiment.temperature,
+                                    max_tokens=experiment.max_tokens,
                                     callbacks=[JsonlCallLog(run_dir / "reflections.jsonl")])
 
         def settle() -> int:

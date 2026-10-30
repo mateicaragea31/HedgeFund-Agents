@@ -68,6 +68,9 @@ class ExperimentConfig(_Strict):
     holding_period_days: int = 5
     sampling: Sampling = Sampling()
     repeats: int = 1  # independent runs of the whole experiment (CLAUDE.md §3.5: at least 3)
+    # Cap on every answer's length (tokens). Normal answers stay under ~1,500; the cap stops a
+    # runaway reply (a 70B form once ran for an hour) and makes it fall back to plain text.
+    max_tokens: int = 4096
 
     @model_validator(mode="after")
     def _check(self):

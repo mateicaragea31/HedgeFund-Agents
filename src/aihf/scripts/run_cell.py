@@ -210,9 +210,11 @@ def main(argv: list[str] | None = None) -> int:
     (cell_dir / "llm_log.jsonl").unlink(missing_ok=True)  # a re-run starts a fresh log
     call_log = JsonlCallLog(cell_dir / "llm_log.jsonl")
     quick = make_chat_model(args.backend_url, experiment.quick_model,
-                            temperature=experiment.temperature, callbacks=[call_log])
+                            temperature=experiment.temperature,
+                            max_tokens=experiment.max_tokens, callbacks=[call_log])
     deep = make_chat_model(args.backend_url, experiment.deep_model,
-                           temperature=experiment.temperature, callbacks=[call_log])
+                           temperature=experiment.temperature,
+                            max_tokens=experiment.max_tokens, callbacks=[call_log])
     report = run(experiment, model, ticker, args.date, quick_llm=quick, deep_llm=deep, data=archive,
                  cell_dir=cell_dir, memory_path=args.out / "memory.md",
                  extra={"backend_url": args.backend_url})
