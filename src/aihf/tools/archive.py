@@ -2,7 +2,8 @@
 
 It serves prices (the Market Analyst's three tools), SEC filings (the Fundamentals Analyst's
 five tools), Reddit posts (the Sentiment Analyst) and company and global news (News and
-Sentiment Analysts); macro series and StockTwits are still gap notes inherited from GapSource.
+Sentiment Analysts) and FRED macro series (News Analyst); StockTwits is still the gap note
+inherited from GapSource (DEVIATIONS D4).
 """
 
 import os
@@ -12,12 +13,14 @@ from pathlib import Path
 import pandas as pd
 
 from aihf.agents.context import load_instruments
+from aihf.data.macro import observations_as_of, read_info
 from aihf.data.news import GLOBAL_NEWS_QUERIES, load_articles, slug
 from aihf.data.news import missing_months as missing_news_months
 from aihf.data.pit import NEW_YORK, decision_cutoff
 from aihf.data.prices import coverage, load_bars
 from aihf.data.reddit import SUBREDDITS, load_posts, missing_months
 from aihf.data.sec import days_before, facts_known_at, form4_known_at, read_meta
+from aihf.tools.macro import macro_report, resolve_series_id, window_start
 from aihf.tools.market import indicator_window, stock_data_csv, verified_snapshot
 from aihf.tools.news import (
     GLOBAL_NEWS_ARTICLE_LIMIT,
@@ -160,3 +163,23 @@ class ArchiveSource(GapSource):
                        reason=f"not in our news archive ({', '.join(missing)})")
         per_query = [(q, load_articles(self.root, "guardian", slug(q), start, end)) for q in GLOBAL_NEWS_QUERIES]
         return global_news(per_query, start_date, curr_date, limit)
+
+    # --- FRED macro series (data/macro.py, tools/macro.py) ---
+
+    def get_macro_indicators(self, indicator, curr_date, look_back_days):
+        try:
+            series_id = resolve_series_id(indicator)
+        except ValueError as e:
+            return f"FRED: {e}"  # upstream's guidance for a phrase passed as an indicator
+        start_date = window_start(curr_date, look_back_days)
+        info = read_info(self.root, series_id)
+        if info is None:
+            return gap(f"Macro series {series_id}", f"{start_date}..{curr_date}", "macro data",
+                       reason=f"{series_id} is not in our FRED archive (it holds the series behind "
+                              "the aliases, e.g. cpi, unemployment, 10y_treasury)")
+        if not info.vintages_from <= date.fromisoformat(curr_date) <= info.vintages_to:
+            return gap(f"Macro series {series_id}", f"{start_date}..{curr_date}", "macro data",
+                       reason=f"our archive holds its vintages for {info.vintages_from}..{info.vintages_to} only")
+        points = observations_as_of(self.root, series_id, curr_date, start_date, curr_date)
+        return macro_report(series_id, info.title, info.units, info.frequency, info.seasonal,
+                            points, start_date, curr_date)
