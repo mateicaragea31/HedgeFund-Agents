@@ -1,6 +1,10 @@
 # `main` profiles (CLAUDE.md §4.3): the replication backbone. One file for both hardware
 # profiles; the job records which partition it ran on (main-a100 vs main-h100 must not be mixed
 # within one experiment).
+#
+# 3 GPUs, pipeline parallel: the student account may use at most 3 GPUs per job (sacctmgr,
+# 2026-10-30), and tensor parallelism must divide Llama-70B's 8 KV heads (1, 2, 4, 8), so each
+# GPU holds a stack of whole layers instead (80 layers ≈ 27 + 27 + 26). Same weights, same bf16.
 
 name: llama-3.3-70b                      # name the vLLM server answers to
 profile: main-a100
@@ -11,12 +15,13 @@ knowledge_cutoff: 2023-12-31             # model card: "December 2023"; the runn
 
 hardware:
   partition: dgxa100
-  gpus: 4
+  gpus: 3
   precision: bf16
 
 vllm:                                    # flags for `vllm serve` (vLLM 0.23.0, lab image vllm_v4.sif)
   dtype: bfloat16
-  tensor_parallel_size: 4
+  tensor_parallel_size: 1
+  pipeline_parallel_size: 3
   max_model_len: 65536
   gpu_memory_utilization: 0.90
   enable_prefix_caching: true

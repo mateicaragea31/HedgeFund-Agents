@@ -2,10 +2,11 @@
 # §6.2 leakage probe: serve one model, ask it the probe questions (no tools), score them.
 # Output: results/leakage/<served name>/{questions,answers,llm_log}.jsonl, summary.csv, meta.json
 #
-# Submit from FEP (MODEL=dev is the default; the 70B needs 4 GPUs, asked for on the command line):
+# Submit from FEP (MODEL=dev is the default; the 70B needs 3 GPUs, asked for on the command line):
 #   cd $AIHF_WS/AI_HedgeFund && mkdir -p logs
 #   sbatch slurm/leakage.sbatch                                        # Llama-3.1-8B, 1 GPU
-#   sbatch --gres=gpu:4 --export=ALL,MODEL=70b slurm/leakage.sbatch    # Llama-3.3-70B, 4 GPUs
+#   sbatch --gres=gpu:3 --export=ALL,MODEL=70b slurm/leakage.sbatch    # Llama-3.3-70B, 3 GPUs
+# (at most 3 GPUs per job for the student account: the 70B runs pipeline parallel, see its yaml)
 # Add --partition=dgxh100 to use the H100s, --exclude=<node> to avoid a broken node.
 #
 #SBATCH --job-name=aihf-leakage
@@ -29,17 +30,17 @@ case "$MODEL" in
   dev)
     MODEL_CONFIG=configs/models/llama31_8b_dev.yaml
     MODEL_DIR=$AIHF_LAB/.cache/hub/models--meta-llama--Meta-Llama-3.1-8B-Instruct/snapshots/0e9e39f249a16976918f6564b8830bc894c89659
-    SERVED_NAME=llama-3.1-8b; TP=1; WAIT_MIN=10 ;;
+    SERVED_NAME=llama-3.1-8b; TP=1; PP=1; WAIT_MIN=10 ;;
   70b)
     MODEL_CONFIG=configs/models/llama33_70b_main.yaml
     MODEL_DIR=$AIHF_LAB/.cache/models--meta-llama--Llama-3.3-70B-Instruct/snapshots/6f6073b423013f6a7d4d9f39144961bfbfbc386b
-    SERVED_NAME=llama-3.3-70b; TP=4; WAIT_MIN=40 ;;   # 140 GB of weights from network storage
+    SERVED_NAME=llama-3.3-70b; TP=1; PP=3; WAIT_MIN=40 ;;   # 140 GB of weights from network storage
   *) echo "MODEL must be dev or 70b"; exit 1 ;;
 esac
 
 GPUS=$(nvidia-smi -L | wc -l)
-if [ "$GPUS" -ne "$TP" ]; then
-  echo "STOP: $MODEL needs $TP GPU(s) but this job has $GPUS. For 70b submit with --gres=gpu:4."
+if [ "$GPUS" -ne $(( TP * PP )) ]; then
+  echo "STOP: $MODEL needs $(( TP * PP )) GPU(s) but this job has $GPUS. For 70b submit with --gres=gpu:3."
   exit 1
 fi
 
@@ -54,7 +55,7 @@ VLLM_LOG=logs/vllm-${SLURM_JOB_ID}.log
 
 export AIHF_GIT_COMMIT=$(git rev-parse HEAD)
 echo "== job $SLURM_JOB_ID on $(hostname) ($SLURM_JOB_PARTITION), commit ${AIHF_GIT_COMMIT:0:7}, $(date -Is)"
-echo "== model $MODEL: $SERVED_NAME, tensor parallel $TP"
+echo "== model $MODEL: $SERVED_NAME, tensor parallel $TP, pipeline parallel $PP"
 nvidia-smi -L
 
 echo "== sha256 of the serving image (15 GB, takes under a minute)"
@@ -74,7 +75,7 @@ START=$(date +%s)
 apptainer exec --nv "$SERVE_SIF" vllm serve "$MODEL_DIR" \
   --served-model-name "$SERVED_NAME" \
   --dtype bfloat16 \
-  --tensor-parallel-size "$TP" \
+  --tensor-parallel-size "$TP" --pipeline-parallel-size "$PP" \
   --max-model-len 65536 \
   --gpu-memory-utilization 0.90 \
   --enable-prefix-caching \
