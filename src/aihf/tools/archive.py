@@ -158,5 +158,5 @@ class ArchiveSource(GapSource):
         if missing:
             return gap("Global news", f"{start_date}..{curr_date}", "global news",
                        reason=f"not in our news archive ({', '.join(missing)})")
-        per_query = [load_articles(self.root, "guardian", k, start, end) for k in keys]
+        per_query = [(q, load_articles(self.root, "guardian", slug(q), start, end)) for q in GLOBAL_NEWS_QUERIES]
         return global_news(per_query, start_date, curr_date, limit)
