@@ -28,6 +28,9 @@ dev = [
     "ruff>=0.15",
     "pytest>=8.0",
 ]
+plots = [
+    "matplotlib>=3.9",  # only aihf.scripts.plot_evaluation needs it
+]
 
 [tool.setuptools.packages.find]
 where = ["src"]
