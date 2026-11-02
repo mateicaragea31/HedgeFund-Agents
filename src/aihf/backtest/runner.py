@@ -89,6 +89,20 @@ class RunResult:
     waves: list[WaveStats] = field(default_factory=list)
 
 
+def last_error(cell: Path) -> str:
+    """The last line of a failed attempt's worker.log, or a pointer to it."""
+    log = cell / "worker.log"
+    lines = log.read_text(errors="replace").strip().splitlines() if log.exists() else []
+    return lines[-1][:300] if lines else "no worker.log"
+
+
+def keep_attempt_log(cell: Path, attempt: int) -> None:
+    """Keep a failed attempt's worker.log (the next attempt starts a fresh one)."""
+    log = cell / "worker.log"
+    if log.exists():
+        log.replace(cell / f"worker.attempt{attempt}.log")
+
+
 class Runner:
     def __init__(self, run_dir: Path, tickers: list[str], waves: list[list[str]], *, start: Starter,
                  memory_log=None, settle: Callable[[], int] | None = None, max_workers: int = 15,
@@ -171,7 +185,12 @@ class Runner:
                     logger.warning("%s %s timed out (attempt %d)", job.ticker, job.trade_date, attempt)
                 if handle.done() and handle.ok() and is_done(job.cell_dir):
                     self._finish(job, True, attempt, stats, failed)
-                elif attempt <= self.retries:
+                    continue
+                if not timed_out:
+                    logger.warning("%s %s failed (attempt %d): %s", job.ticker, job.trade_date, attempt,
+                                   last_error(job.cell_dir))
+                keep_attempt_log(job.cell_dir, attempt)
+                if attempt <= self.retries:
                     queue.append((job, attempt + 1))
                 else:
                     self._finish(job, False, attempt, stats, failed)
