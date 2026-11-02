@@ -62,9 +62,9 @@ def plot_ticker(curves: pd.DataFrame, ticker: str, path, subtitle: str = "") -> 
     matplotlib.use("Agg")  # no screen on FEP
     import matplotlib.pyplot as plt
 
-    fig, ax = plt.subplots(figsize=(9, 5.5))
+    fig, ax = plt.subplots(figsize=(11, 5.5))
     draw_ticker(ax, curves, ticker)
-    ax.legend(loc="upper left", fontsize=8)
+    ax.legend(loc="upper left", bbox_to_anchor=(1.01, 1), fontsize=8)  # outside: never covers a line
     if subtitle:
         fig.text(0.99, 0.01, subtitle, ha="right", va="bottom", fontsize=7, color="grey")
     fig.tight_layout()
@@ -83,9 +83,10 @@ def plot_all(curves: pd.DataFrame, tickers: list[str], path, subtitle: str = "")
     for ax, ticker in zip(axes[0], tickers, strict=True):
         draw_ticker(ax, curves, ticker)
     handles, labels = axes[0][0].get_legend_handles_labels()
-    fig.legend(handles, labels, loc="lower center", ncol=len(labels), fontsize=8, frameon=False)
-    if subtitle:
-        fig.text(0.99, 0.01, subtitle, ha="right", va="bottom", fontsize=7, color="grey")
-    fig.tight_layout(rect=(0, 0.07, 1, 1))
+    fig.legend(handles, labels, loc="lower center", bbox_to_anchor=(0.5, 0.04), ncol=len(labels),
+               fontsize=8, frameon=False)
+    if subtitle:  # its own line under the legend
+        fig.text(0.5, 0.005, subtitle, ha="center", va="bottom", fontsize=7, color="grey")
+    fig.tight_layout(rect=(0, 0.11, 1, 1))
     fig.savefig(path, dpi=150)
     plt.close(fig)
