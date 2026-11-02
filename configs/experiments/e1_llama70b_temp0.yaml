@@ -1,0 +1,17 @@
+# E1 temperature-0 reference (CLAUDE.md §3.5): E1 with greedy decoding instead of the model's
+# sampling defaults, one run. Everything else as e1_llama70b.yaml. Greedy decoding removes the
+# sampling randomness; small run-to-run differences can remain from batching on the GPU.
+name: e1_llama70b_paper_window_temp0
+phase: 1
+tickers: [AAPL, GOOGL, AMZN]
+window: {start: 2024-01-02, end: 2024-03-28}
+model_profile: configs/models/llama33_70b_main.yaml   # knowledge_cutoff: 2023-12-31; 3 GPUs, PP 3
+quick_model: llama-3.3-70b
+deep_model: llama-3.3-70b
+analysts: [market, social, news, fundamentals]
+max_debate_rounds: 1
+max_risk_discuss_rounds: 1
+memory: true
+holding_period_days: 5
+sampling: {temperature: 0.0}
+repeats: 1
